@@ -1,0 +1,172 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bump Generator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>bump generator</h1>
+      </div>
+      <div class="status" id="status">Ready.</div>
+    </header>
+
+    <main>
+      <section class="controls" aria-label="Bump settings">
+        <div class="field">
+          <label for="bumpText">Text</label>
+          <textarea id="bumpText" spellcheck="true">we will now stare quietly at this image for five seconds.</textarea>
+        </div>
+
+        <div class="field">
+          <label for="imageInput">Background image</label>
+          <input id="imageInput" type="file" accept="image/*">
+        </div>
+
+        <section class="wallpaper-panel" aria-label="Wallpaper generator">
+          <div class="panel-title">Wallpaper generator</div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="wallpaperShapes">Shapes</label>
+              <select id="wallpaperShapes">
+                <option value="mixed">Mixed geometry</option>
+                <option value="circles">Circles</option>
+                <option value="diamonds">Diamonds</option>
+                <option value="triangles">Triangles</option>
+                <option value="lines">Lines</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="wallpaperScheme">Colors</label>
+              <select id="wallpaperScheme">
+                <option value="midnight">Midnight signal</option>
+                <option value="pool">Pool hall</option>
+                <option value="candy">Neon candy</option>
+                <option value="paper">Sun-faded paper</option>
+                <option value="mono">Monochrome</option>
+                <option value="arcade">Arcade carpet</option>
+                <option value="warning">Hazard tape</option>
+                <option value="citrus">Citrus pop</option>
+                <option value="broadcast">Broadcast bars</option>
+                <option value="miami">Miami night</option>
+                <option value="mint">Mint punch</option>
+                <option value="ruby">Ruby terminal</option>
+                <option value="blueprint">Blueprint</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="wallpaperSpacing">Spacing</label>
+            <div class="range-row">
+              <input id="wallpaperSpacing" type="range" min="34" max="170" value="86">
+              <span id="wallpaperSpacingValue">86</span>
+            </div>
+          </div>
+          <canvas id="wallpaperPreview" class="wallpaper-preview" width="480" height="270" aria-label="Generated wallpaper preview"></canvas>
+          <div class="actions compact-actions">
+            <button id="randomizeWallpaperBtn" type="button" class="secondary">Randomize</button>
+            <button id="useWallpaperBtn" type="button">Use wallpaper</button>
+          </div>
+        </section>
+
+        <div class="field">
+          <label for="songInput">Song</label>
+          <input id="songInput" type="file" accept="audio/*">
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="duration">Duration</label>
+            <input id="duration" type="number" min="2" max="12" step="1" value="5">
+          </div>
+          <div class="field">
+            <label for="fontSize">Text size</label>
+            <div class="range-row">
+              <input id="fontSize" type="range" min="24" max="72" value="42">
+              <span id="fontSizeValue">42</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label">Placement</div>
+          <div class="segmented" role="radiogroup" aria-label="Text placement">
+            <input id="placeTop" name="placement" type="radio" value="top">
+            <label for="placeTop">Top</label>
+            <input id="placeMiddle" name="placement" type="radio" value="middle" checked>
+            <label for="placeMiddle">Middle</label>
+            <input id="placeBottom" name="placement" type="radio" value="bottom">
+            <label for="placeBottom">Bottom</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label">Alignment</div>
+          <div class="segmented" role="radiogroup" aria-label="Text alignment">
+            <input id="alignLeft" name="alignment" type="radio" value="left" checked>
+            <label for="alignLeft">Left</label>
+            <input id="alignCenter" name="alignment" type="radio" value="center">
+            <label for="alignCenter">Center</label>
+            <input id="alignRight" name="alignment" type="radio" value="right">
+            <label for="alignRight">Right</label>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="field">
+            <label for="format">Canvas</label>
+            <select id="format">
+              <option value="landscape">16:9 landscape</option>
+              <option value="square">1:1 square</option>
+              <option value="vertical">9:16 vertical</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tone">Style</label>
+            <select id="tone">
+              <option value="classic">black card</option>
+              <option value="caption">image caption</option>
+              <option value="washed">washed photo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="tintStrength">Tint</label>
+          <div class="range-row">
+            <input id="tintStrength" type="range" min="0" max="100" value="72">
+            <span id="tintStrengthValue">72%</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="previewBtn" type="button" class="secondary">Preview</button>
+          <button id="renderBtn" type="button">Generate video</button>
+          <a id="downloadLink" class="download" href="#" download="bump.webm" aria-disabled="true">Download</a>
+        </div>
+
+        <p class="fine-print">Exports as WebM in browsers with MediaRecorder support. Uploaded files stay in this browser tab.</p>
+      </section>
+
+      <section class="preview-shell" aria-label="Preview and output">
+        <div class="stage">
+          <canvas id="stage" width="1280" height="720"></canvas>
+        </div>
+        <div class="meter">
+          <span id="timeLabel">0.0s</span>
+          <div class="bar" aria-hidden="true"><span id="progress"></span></div>
+          <span id="durationLabel">5.0s</span>
+        </div>
+        <video id="outputVideo" class="hide" controls playsinline></video>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
