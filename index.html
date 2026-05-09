@@ -18,77 +18,29 @@
     <main>
       <section class="controls" aria-label="Bump settings">
         <div class="field">
-          <label for="bumpText">Text</label>
-          <textarea id="bumpText" spellcheck="true">we will now stare quietly at this image for five seconds.</textarea>
+          <div class="label">Text lines</div>
+          <div id="textLines" class="text-lines">
+            <div class="text-line">
+              <input class="line-input" type="text" value="we will now stare quietly at this image for five seconds." aria-label="Text line 1">
+              <button class="icon-button remove-line" type="button" aria-label="Remove line" title="Remove line">x</button>
+            </div>
+          </div>
+          <button id="addLineBtn" type="button" class="secondary">Add line</button>
         </div>
 
         <div class="field">
-          <label for="imageInput">Background image</label>
-          <input id="imageInput" type="file" accept="image/*">
+          <label for="secondsPerLine">Seconds per line</label>
+          <div class="range-row">
+            <input id="secondsPerLine" type="range" min="1" max="12" step="1" value="5">
+            <span id="secondsPerLineValue">5s</span>
+          </div>
         </div>
-
-        <section class="wallpaper-panel" aria-label="Wallpaper generator">
-          <div class="panel-title">Wallpaper generator</div>
-          <div class="grid-2">
-            <div class="field">
-              <label for="wallpaperShapes">Shapes</label>
-              <select id="wallpaperShapes">
-                <option value="mixed">Mixed geometry</option>
-                <option value="circles">Circles</option>
-                <option value="diamonds">Diamonds</option>
-                <option value="triangles">Triangles</option>
-                <option value="lines">Lines</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="wallpaperScheme">Colors</label>
-              <select id="wallpaperScheme">
-                <option value="midnight">Midnight signal</option>
-                <option value="pool">Pool hall</option>
-                <option value="candy">Neon candy</option>
-                <option value="paper">Sun-faded paper</option>
-                <option value="mono">Monochrome</option>
-                <option value="arcade">Arcade carpet</option>
-                <option value="warning">Hazard tape</option>
-                <option value="citrus">Citrus pop</option>
-                <option value="broadcast">Broadcast bars</option>
-                <option value="miami">Miami night</option>
-                <option value="mint">Mint punch</option>
-                <option value="ruby">Ruby terminal</option>
-                <option value="blueprint">Blueprint</option>
-              </select>
-            </div>
-          </div>
-          <div class="field">
-            <label for="wallpaperSpacing">Spacing</label>
-            <div class="range-row">
-              <input id="wallpaperSpacing" type="range" min="34" max="170" value="86">
-              <span id="wallpaperSpacingValue">86</span>
-            </div>
-          </div>
-          <canvas id="wallpaperPreview" class="wallpaper-preview" width="480" height="270" aria-label="Generated wallpaper preview"></canvas>
-          <div class="actions compact-actions">
-            <button id="randomizeWallpaperBtn" type="button" class="secondary">Randomize</button>
-            <button id="useWallpaperBtn" type="button">Use wallpaper</button>
-          </div>
-        </section>
 
         <div class="field">
-          <label for="songInput">Song</label>
-          <input id="songInput" type="file" accept="audio/*">
-        </div>
-
-        <div class="grid-2">
-          <div class="field">
-            <label for="duration">Duration</label>
-            <input id="duration" type="number" min="2" max="12" step="1" value="5">
-          </div>
-          <div class="field">
-            <label for="fontSize">Text size</label>
-            <div class="range-row">
-              <input id="fontSize" type="range" min="24" max="72" value="42">
-              <span id="fontSizeValue">42</span>
-            </div>
+          <label for="fontSize">Text size</label>
+          <div class="range-row">
+            <input id="fontSize" type="range" min="24" max="72" value="42">
+            <span id="fontSizeValue">42</span>
           </div>
         </div>
 
@@ -115,6 +67,123 @@
             <label for="alignRight">Right</label>
           </div>
         </div>
+
+        <div class="field">
+          <label for="songInput">Audio</label>
+          <input id="songInput" type="file" accept="audio/*">
+        </div>
+
+        <details class="credits-panel" aria-label="Music credit settings">
+          <summary class="panel-title">
+            <span>Music credit</span>
+            <span class="summary-hint">Open</span>
+          </summary>
+          <div class="panel-body">
+            <div class="field">
+              <label for="creditText">Credit text</label>
+              <input id="creditText" type="text" value="" placeholder="Audio metadata will appear here">
+            </div>
+            <div class="grid-2">
+              <div class="field">
+                <label for="creditPosition">Position</label>
+                <select id="creditPosition">
+                  <option value="top-left">Top left</option>
+                  <option value="top-center">Top center</option>
+                  <option value="top-right">Top right</option>
+                  <option value="center-left">Center left</option>
+                  <option value="center">Center</option>
+                  <option value="center-right">Center right</option>
+                  <option value="bottom-left">Bottom left</option>
+                  <option value="bottom-center">Bottom center</option>
+                  <option value="bottom-right" selected>Bottom right</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="creditFont">Font</label>
+                <select id="creditFont">
+                  <option value="Arial, Helvetica, sans-serif">Arial</option>
+                  <option value="Georgia, serif">Georgia</option>
+                  <option value="'Courier New', monospace">Courier New</option>
+                  <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+                  <option value="Verdana, sans-serif">Verdana</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="creditSize">Credit size</label>
+              <div class="range-row">
+                <input id="creditSize" type="range" min="12" max="40" value="18">
+                <span id="creditSizeValue">18</span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <div class="field">
+          <label for="imageInput">Background image</label>
+          <input id="imageInput" type="file" accept="image/*">
+        </div>
+
+        <details class="wallpaper-panel" aria-label="Wallpaper generator">
+          <summary class="panel-title">
+            <span>Wallpaper generator</span>
+            <span class="summary-hint">Open</span>
+          </summary>
+          <div class="panel-body">
+            <div class="grid-2">
+              <div class="field">
+                <label for="wallpaperShapes">Shapes</label>
+                <select id="wallpaperShapes">
+                  <option value="mixed">Mixed geometry</option>
+                  <option value="circles">Circles</option>
+                  <option value="diamonds">Diamonds</option>
+                  <option value="triangles">Triangles</option>
+                  <option value="lines">Lines</option>
+                  <option value="stripes">Stripes</option>
+                  <option value="polka">Polka dots</option>
+                  <option value="plaid">Plaid</option>
+                  <option value="tartan">Tartan</option>
+                  <option value="argyle">Argyle</option>
+                  <option value="mondrian">Mondrian</option>
+                  <option value="checkerboard">Checkerboard</option>
+                  <option value="terrazzo">Terrazzo</option>
+                  <option value="memphis">Memphis</option>
+                  <option value="starburst">Starburst</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="wallpaperScheme">Colors</label>
+                <select id="wallpaperScheme">
+                  <option value="midnight">Midnight signal</option>
+                  <option value="pool">Pool hall</option>
+                  <option value="candy">Neon candy</option>
+                  <option value="paper">Sun-faded paper</option>
+                  <option value="mono">Monochrome</option>
+                  <option value="arcade">Arcade carpet</option>
+                  <option value="warning">Hazard tape</option>
+                  <option value="citrus">Citrus pop</option>
+                  <option value="broadcast">Broadcast bars</option>
+                  <option value="miami">Miami night</option>
+                  <option value="mint">Mint punch</option>
+                  <option value="ruby">Ruby terminal</option>
+                  <option value="blueprint">Blueprint</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="wallpaperSpacing">Spacing</label>
+              <div class="range-row">
+                <input id="wallpaperSpacing" type="range" min="34" max="170" value="86">
+                <span id="wallpaperSpacingValue">86</span>
+              </div>
+            </div>
+            <canvas id="wallpaperPreview" class="wallpaper-preview" width="480" height="270" aria-label="Generated wallpaper preview"></canvas>
+            <div class="actions compact-actions">
+              <button id="randomizeWallpaperBtn" type="button" class="secondary">Randomize</button>
+              <button id="useWallpaperBtn" type="button">Use wallpaper</button>
+            </div>
+          </div>
+        </details>
 
         <div class="grid-2">
           <div class="field">

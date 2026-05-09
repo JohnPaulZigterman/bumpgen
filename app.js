@@ -1,10 +1,17 @@
 ﻿const canvas = document.querySelector("#stage");
 const ctx = canvas.getContext("2d");
 const stage = document.querySelector(".stage");
-const bumpText = document.querySelector("#bumpText");
+const textLines = document.querySelector("#textLines");
+const addLineBtn = document.querySelector("#addLineBtn");
 const imageInput = document.querySelector("#imageInput");
 const songInput = document.querySelector("#songInput");
-const durationInput = document.querySelector("#duration");
+const creditText = document.querySelector("#creditText");
+const creditPosition = document.querySelector("#creditPosition");
+const creditFont = document.querySelector("#creditFont");
+const creditSize = document.querySelector("#creditSize");
+const creditSizeValue = document.querySelector("#creditSizeValue");
+const secondsPerLineInput = document.querySelector("#secondsPerLine");
+const secondsPerLineValue = document.querySelector("#secondsPerLineValue");
 const fontSizeInput = document.querySelector("#fontSize");
 const fontSizeValue = document.querySelector("#fontSizeValue");
 const formatInput = document.querySelector("#format");
@@ -34,6 +41,7 @@ let outputUrl = "";
 let animationId = 0;
 let previewStart = performance.now();
 let wallpaperSeed = Math.floor(Math.random() * 100000);
+let creditWasAutoFilled = true;
 
 const state = {
   rendering: false,
@@ -53,8 +61,121 @@ function selectedAlignment() {
   return document.querySelector("input[name='alignment']:checked").value;
 }
 
+function secondsPerLine() {
+  return clamp(Number(secondsPerLineInput.value) || 5, 1, 12);
+}
+
+function textLineValues() {
+  const lines = [...textLines.querySelectorAll(".line-input")]
+    .map((input) => input.value.trim())
+    .filter(Boolean);
+  return lines.length ? lines : [" "];
+}
+
 function durationSeconds() {
-  return clamp(Number(durationInput.value) || 5, 2, 12);
+  return textLineValues().length * secondsPerLine();
+}
+
+function activeText(time) {
+  const lines = textLineValues();
+  const index = Math.min(lines.length - 1, Math.floor(time / secondsPerLine()));
+  return lines[index] || " ";
+}
+
+function synchsafeToInt(bytes) {
+  return ((bytes[0] & 0x7f) << 21) | ((bytes[1] & 0x7f) << 14) | ((bytes[2] & 0x7f) << 7) | (bytes[3] & 0x7f);
+}
+
+function readUint32(bytes, synchsafe = false) {
+  if (synchsafe) return synchsafeToInt(bytes);
+  return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+}
+
+function decodeUtf16(bytes, littleEndian) {
+  const values = [];
+  for (let index = 0; index + 1 < bytes.length; index += 2) {
+    const code = littleEndian ? bytes[index] | (bytes[index + 1] << 8) : (bytes[index] << 8) | bytes[index + 1];
+    if (code === 0) break;
+    values.push(code);
+  }
+  return String.fromCharCode(...values);
+}
+
+function decodeId3Text(bytes) {
+  if (!bytes.length) return "";
+  const encoding = bytes[0];
+  const payload = bytes.slice(1);
+
+  if (encoding === 0) return new TextDecoder("latin1").decode(payload).replace(/\0+$/g, "").trim();
+  if (encoding === 3) return new TextDecoder("utf-8").decode(payload).replace(/\0+$/g, "").trim();
+  if (encoding === 1) {
+    if (payload[0] === 0xff && payload[1] === 0xfe) return decodeUtf16(payload.slice(2), true).trim();
+    if (payload[0] === 0xfe && payload[1] === 0xff) return decodeUtf16(payload.slice(2), false).trim();
+    return decodeUtf16(payload, false).trim();
+  }
+  if (encoding === 2) return decodeUtf16(payload, false).trim();
+
+  return new TextDecoder("utf-8").decode(payload).replace(/\0+$/g, "").trim();
+}
+
+async function readAudioMetadata(file) {
+  const headerBuffer = await file.slice(0, Math.min(file.size, 512 * 1024)).arrayBuffer();
+  const bytes = new Uint8Array(headerBuffer);
+  const tags = {};
+
+  if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return tags;
+
+  const majorVersion = bytes[3];
+  const tagSize = synchsafeToInt(bytes.slice(6, 10));
+  let offset = 10;
+  const end = Math.min(bytes.length, 10 + tagSize);
+
+  while (offset + 10 <= end) {
+    const frameId = new TextDecoder("latin1").decode(bytes.slice(offset, offset + 4));
+    if (!/^[A-Z0-9]{4}$/.test(frameId)) break;
+    const frameSize = readUint32(bytes.slice(offset + 4, offset + 8), majorVersion === 4);
+    if (!frameSize) break;
+    const frameStart = offset + 10;
+    const frameEnd = Math.min(frameStart + frameSize, end);
+    const frameData = bytes.slice(frameStart, frameEnd);
+
+    if (frameId === "TPE1") tags.artist = decodeId3Text(frameData);
+    if (frameId === "TIT2") tags.title = decodeId3Text(frameData);
+    if (frameId === "TALB") tags.album = decodeId3Text(frameData);
+
+    offset = frameEnd;
+  }
+
+  return tags;
+}
+
+async function autofillCreditFromAudio(file) {
+  if (!file || (!creditWasAutoFilled && creditText.value.trim())) return;
+
+  try {
+    const metadata = await readAudioMetadata(file);
+    const fallbackName = file.name.replace(/\.[^/.]+$/, "");
+    let text = "";
+
+    if (metadata.artist && metadata.title) {
+      text = `Music: ${metadata.title} by ${metadata.artist}`;
+    } else if (metadata.artist) {
+      text = `Music: ${metadata.artist}`;
+    } else if (metadata.title) {
+      text = `Music: ${metadata.title}`;
+    } else {
+      text = `Music: ${fallbackName}`;
+    }
+
+    creditText.value = text;
+    creditWasAutoFilled = true;
+    restartPreview();
+  } catch (error) {
+    console.warn("Could not read audio metadata", error);
+    creditText.value = `Music: ${file.name.replace(/\.[^/.]+$/, "")}`;
+    creditWasAutoFilled = true;
+    restartPreview();
+  }
 }
 
 function tintAlpha() {
@@ -214,6 +335,227 @@ function drawWallpaperShape(target, shape, x, y, size, rotation) {
   target.fill();
 }
 
+function drawStripePattern(target, width, height, time, config, palette) {
+  const spacing = config.spacing;
+  const diagonal = Math.hypot(width, height);
+  target.save();
+  target.translate(width / 2, height / 2);
+  target.rotate(-Math.PI / 8);
+  target.globalAlpha = 0.86;
+  for (let x = -diagonal; x < diagonal; x += spacing) {
+    const color = palette.shape[Math.abs(Math.floor(x / spacing)) % palette.shape.length];
+    target.fillStyle = color;
+    target.fillRect(x + (time * 18) % spacing, -diagonal, spacing * 0.48, diagonal * 2);
+  }
+  target.restore();
+}
+
+function drawPolkaPattern(target, width, height, time, config, palette) {
+  const spacing = config.spacing;
+  target.save();
+  target.globalCompositeOperation = "screen";
+  for (let y = -spacing; y < height + spacing; y += spacing) {
+    for (let x = -spacing; x < width + spacing; x += spacing) {
+      const cellX = Math.round(x / spacing);
+      const cellY = Math.round(y / spacing);
+      const radius = spacing * (0.22 + seededUnit(config.seed, cellX, cellY, 4) * 0.12);
+      const offset = (cellY % 2) * spacing * 0.5;
+      const pulse = Math.sin(time + cellX * 0.7 + cellY) * spacing * 0.025;
+      target.globalAlpha = 0.72;
+      target.fillStyle = palette.shape[Math.abs(cellX + cellY) % palette.shape.length];
+      target.beginPath();
+      target.arc(x + offset, y + pulse, radius, 0, Math.PI * 2);
+      target.fill();
+    }
+  }
+  target.restore();
+}
+
+function drawPlaidPattern(target, width, height, time, config, palette, tartan = false) {
+  const spacing = config.spacing;
+  const bands = tartan
+    ? [0.14, 0.24, 0.05, 0.42, 0.07]
+    : [0.18, 0.34, 0.1];
+
+  target.save();
+  target.globalCompositeOperation = "screen";
+  bands.forEach((band, index) => {
+    const step = spacing * (index + 1.05);
+    const size = Math.max(3, spacing * band);
+    target.fillStyle = palette.shape[index % palette.shape.length];
+    target.globalAlpha = tartan ? 0.48 : 0.36;
+    for (let x = -step; x < width + step; x += step) {
+      target.fillRect(x + (time * 4) % step, 0, size, height);
+    }
+    for (let y = -step; y < height + step; y += step) {
+      target.fillRect(0, y - (time * 3) % step, width, size);
+    }
+  });
+  target.restore();
+}
+
+function drawArgylePattern(target, width, height, time, config, palette) {
+  const spacing = config.spacing;
+  target.save();
+  target.globalCompositeOperation = "screen";
+  for (let y = -spacing; y < height + spacing * 2; y += spacing * 0.9) {
+    for (let x = -spacing; x < width + spacing * 2; x += spacing) {
+      const cellX = Math.round(x / spacing);
+      const cellY = Math.round(y / spacing);
+      const cx = x + (cellY % 2) * spacing * 0.5;
+      const cy = y + Math.sin(time * 0.35 + cellX) * spacing * 0.04;
+      target.globalAlpha = 0.58;
+      target.fillStyle = palette.shape[Math.abs(cellX + cellY) % palette.shape.length];
+      drawPolygon(target, cx, cy, spacing * 0.46, 4, Math.PI / 4);
+      target.fill();
+    }
+  }
+
+  target.globalAlpha = 0.52;
+  target.strokeStyle = palette.shape[0];
+  target.lineWidth = Math.max(1, spacing * 0.035);
+  for (let x = -width; x < width * 2; x += spacing) {
+    target.beginPath();
+    target.moveTo(x, -spacing);
+    target.lineTo(x + height, height + spacing);
+    target.stroke();
+    target.beginPath();
+    target.moveTo(x, height + spacing);
+    target.lineTo(x + height, -spacing);
+    target.stroke();
+  }
+  target.restore();
+}
+
+function drawMondrianPattern(target, width, height, time, config, palette) {
+  const spacing = config.spacing;
+  const lineWidth = Math.max(7, spacing * 0.11);
+  target.save();
+  target.globalAlpha = 0.96;
+  target.fillStyle = palette.bg[0];
+  target.fillRect(0, 0, width, height);
+
+  let y = 0;
+  let row = 0;
+  while (y < height) {
+    const rowHeight = spacing * (0.8 + seededUnit(config.seed, row, 0, 1) * 1.5);
+    let x = 0;
+    let col = 0;
+    while (x < width) {
+      const colWidth = spacing * (0.8 + seededUnit(config.seed, col, row, 2) * 1.8);
+      const colorRoll = seededUnit(config.seed, col, row, 3);
+      target.fillStyle = colorRoll < 0.28 ? palette.shape[Math.floor(colorRoll * palette.shape.length * 3) % palette.shape.length] : "#f6f1df";
+      target.fillRect(x, y, colWidth, rowHeight);
+      x += colWidth;
+      col += 1;
+    }
+    y += rowHeight;
+    row += 1;
+  }
+
+  target.strokeStyle = "#090909";
+  target.lineWidth = lineWidth;
+  target.strokeRect(-lineWidth / 2, -lineWidth / 2, width + lineWidth, height + lineWidth);
+  for (let x = spacing; x < width; x += spacing * (1.1 + seededUnit(config.seed, x, 0, 4))) {
+    target.beginPath();
+    target.moveTo(x + Math.sin(time * 0.2) * 2, 0);
+    target.lineTo(x, height);
+    target.stroke();
+  }
+  for (let yLine = spacing; yLine < height; yLine += spacing * (1.1 + seededUnit(config.seed, 0, yLine, 5))) {
+    target.beginPath();
+    target.moveTo(0, yLine);
+    target.lineTo(width, yLine + Math.cos(time * 0.2) * 2);
+    target.stroke();
+  }
+  target.restore();
+}
+
+function drawCheckerboardPattern(target, width, height, time, config, palette) {
+  const spacing = config.spacing * 0.72;
+  target.save();
+  for (let y = 0; y < height + spacing; y += spacing) {
+    for (let x = 0; x < width + spacing; x += spacing) {
+      const index = (Math.floor(x / spacing) + Math.floor(y / spacing)) % 2;
+      target.globalAlpha = 0.78;
+      target.fillStyle = index ? palette.shape[0] : palette.shape[2 % palette.shape.length];
+      target.fillRect(x + Math.sin(time * 0.25) * 3, y, spacing, spacing);
+    }
+  }
+  target.restore();
+}
+
+function drawTerrazzoPattern(target, width, height, time, config, palette) {
+  const spacing = config.spacing;
+  target.save();
+  target.globalCompositeOperation = "screen";
+  for (let y = -spacing; y < height + spacing; y += spacing * 0.55) {
+    for (let x = -spacing; x < width + spacing; x += spacing * 0.55) {
+      const cellX = Math.round(x / spacing);
+      const cellY = Math.round(y / spacing);
+      if (seededUnit(config.seed, cellX, cellY, 1) < 0.34) continue;
+      const sides = 3 + Math.floor(seededUnit(config.seed, cellX, cellY, 2) * 4);
+      const size = spacing * (0.12 + seededUnit(config.seed, cellX, cellY, 3) * 0.18);
+      target.globalAlpha = 0.62;
+      target.fillStyle = palette.shape[Math.floor(seededUnit(config.seed, cellX, cellY, 4) * palette.shape.length)];
+      drawPolygon(target, x, y + Math.sin(time * 0.4 + cellX) * 2, size, sides, seededUnit(config.seed, cellX, cellY, 5) * Math.PI);
+      target.fill();
+    }
+  }
+  target.restore();
+}
+
+function drawStarburstPattern(target, width, height, time, config, palette) {
+  const rays = Math.max(18, Math.floor(360 / Math.max(8, config.spacing * 0.22)));
+  const radius = Math.hypot(width, height);
+  const cx = width * (0.5 + Math.sin(config.seed) * 0.08);
+  const cy = height * (0.5 + Math.cos(config.seed) * 0.08);
+  target.save();
+  target.globalAlpha = 0.82;
+  for (let index = 0; index < rays; index += 1) {
+    const angle = (Math.PI * 2 * index) / rays + time * 0.02;
+    target.fillStyle = palette.shape[index % palette.shape.length];
+    target.beginPath();
+    target.moveTo(cx, cy);
+    target.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+    target.lineTo(cx + Math.cos(angle + Math.PI / rays) * radius, cy + Math.sin(angle + Math.PI / rays) * radius);
+    target.closePath();
+    target.fill();
+  }
+  target.restore();
+}
+
+function drawMemphisPattern(target, width, height, time, config, palette) {
+  drawPolkaPattern(target, width, height, time, config, palette);
+  target.save();
+  target.globalCompositeOperation = "screen";
+  target.globalAlpha = 0.78;
+  for (let y = -config.spacing; y < height + config.spacing; y += config.spacing * 1.25) {
+    for (let x = -config.spacing; x < width + config.spacing; x += config.spacing * 1.25) {
+      const cellX = Math.round(x / config.spacing);
+      const cellY = Math.round(y / config.spacing);
+      const shape = ["triangles", "lines", "diamonds"][Math.floor(seededUnit(config.seed, cellX, cellY, 9) * 3)];
+      target.fillStyle = palette.shape[Math.floor(seededUnit(config.seed, cellX, cellY, 10) * palette.shape.length)];
+      target.strokeStyle = target.fillStyle;
+      drawWallpaperShape(target, shape, x, y, config.spacing * 0.5, seededUnit(config.seed, cellX, cellY, 11) * Math.PI);
+    }
+  }
+  target.restore();
+}
+
+function drawFullCanvasPattern(target, width, height, time, config, palette) {
+  if (config.shapes === "stripes") drawStripePattern(target, width, height, time, config, palette);
+  if (config.shapes === "polka") drawPolkaPattern(target, width, height, time, config, palette);
+  if (config.shapes === "plaid") drawPlaidPattern(target, width, height, time, config, palette);
+  if (config.shapes === "tartan") drawPlaidPattern(target, width, height, time, config, palette, true);
+  if (config.shapes === "argyle") drawArgylePattern(target, width, height, time, config, palette);
+  if (config.shapes === "mondrian") drawMondrianPattern(target, width, height, time, config, palette);
+  if (config.shapes === "checkerboard") drawCheckerboardPattern(target, width, height, time, config, palette);
+  if (config.shapes === "terrazzo") drawTerrazzoPattern(target, width, height, time, config, palette);
+  if (config.shapes === "memphis") drawMemphisPattern(target, width, height, time, config, palette);
+  if (config.shapes === "starburst") drawStarburstPattern(target, width, height, time, config, palette);
+}
+
 function drawWallpaperBackground(target, width, height, time, config) {
   const palette = wallpaperPalette(config.scheme);
   const gradient = target.createLinearGradient(0, 0, width, height);
@@ -222,6 +564,12 @@ function drawWallpaperBackground(target, width, height, time, config) {
   gradient.addColorStop(1, palette.bg[2]);
   target.fillStyle = gradient;
   target.fillRect(0, 0, width, height);
+
+  const fullPatternModes = ["stripes", "polka", "plaid", "tartan", "argyle", "mondrian", "checkerboard", "terrazzo", "memphis", "starburst"];
+  if (fullPatternModes.includes(config.shapes)) {
+    drawFullCanvasPattern(target, width, height, time, config, palette);
+    return;
+  }
 
   const spacing = config.spacing;
   const diagonal = Math.hypot(width, height);
@@ -354,7 +702,7 @@ function wrapText(text, maxWidth, font) {
 }
 
 function drawTextBlock(width, height, time) {
-  const text = bumpText.value.trim() || " ";
+  const text = activeText(time);
   const fontSize = Number(fontSizeInput.value);
   const lineHeight = fontSize * 1.28;
   const pad = Math.round(Math.min(width, height) * 0.075);
@@ -414,6 +762,47 @@ function drawTextBlock(width, height, time) {
   ctx.restore();
 }
 
+function drawCreditBlock(width, height) {
+  const text = creditText.value.trim();
+  if (!text) return;
+
+  const size = Number(creditSize.value);
+  const pad = Math.round(Math.min(width, height) * 0.04);
+  const maxWidth = Math.min(width * 0.42, size * 28);
+  const lines = wrapText(text, maxWidth, `700 ${size}px ${creditFont.value}`);
+  const lineHeight = size * 1.26;
+  const blockHeight = lines.length * lineHeight;
+  const position = creditPosition.value;
+  const [vertical, horizontal = "center"] = position.split("-");
+
+  const align = horizontal === "left" ? "left" : horizontal === "right" ? "right" : "center";
+  const xByAlign = {
+    left: pad,
+    center: width / 2,
+    right: width - pad,
+  };
+  const yByPosition = {
+    top: pad,
+    center: height / 2 - blockHeight / 2,
+    bottom: height - pad - blockHeight,
+  };
+
+  ctx.save();
+  ctx.font = `700 ${size}px ${creditFont.value}`;
+  ctx.textAlign = align;
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "rgba(244, 240, 232, 0.88)";
+  ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+  ctx.shadowBlur = Math.max(6, size * 0.45);
+  ctx.shadowOffsetY = Math.max(1, size * 0.12);
+
+  lines.forEach((line, index) => {
+    ctx.fillText(line, xByAlign[align], yByPosition[vertical] + index * lineHeight);
+  });
+
+  ctx.restore();
+}
+
 function drawFrame(time = 0) {
   setCanvasFormat();
   const width = canvas.width;
@@ -443,6 +832,7 @@ function drawFrame(time = 0) {
   ctx.fillRect(0, 0, width, height);
 
   drawTextBlock(width, height, time);
+  drawCreditBlock(width, height);
 }
 
 function previewLoop(now) {
@@ -599,8 +989,59 @@ async function renderVideo() {
   }
 }
 
+function updateLineRemoveButtons() {
+  const rows = [...textLines.querySelectorAll(".text-line")];
+  rows.forEach((row) => {
+    const button = row.querySelector(".remove-line");
+    button.disabled = rows.length === 1;
+  });
+}
+
+function bindTextLine(row) {
+  const input = row.querySelector(".line-input");
+  const removeButton = row.querySelector(".remove-line");
+
+  input.addEventListener("input", restartPreview);
+  removeButton.addEventListener("click", () => {
+    const rows = [...textLines.querySelectorAll(".text-line")];
+    if (rows.length === 1) {
+      input.value = "";
+    } else {
+      row.remove();
+    }
+    updateLineLabels();
+    restartPreview();
+  });
+}
+
+function updateLineLabels() {
+  [...textLines.querySelectorAll(".text-line")].forEach((row, index) => {
+    row.querySelector(".line-input").setAttribute("aria-label", `Text line ${index + 1}`);
+  });
+  updateLineRemoveButtons();
+}
+
+function addTextLine(value = "") {
+  const row = document.createElement("div");
+  row.className = "text-line";
+  row.innerHTML = `
+    <input class="line-input" type="text" value="" aria-label="Text line">
+    <button class="icon-button remove-line" type="button" aria-label="Remove line" title="Remove line">x</button>
+  `;
+  row.querySelector(".line-input").value = value;
+  textLines.append(row);
+  bindTextLine(row);
+  updateLineLabels();
+  row.querySelector(".line-input").focus();
+  restartPreview();
+}
+
 imageInput.addEventListener("change", () => {
   if (imageInput.files[0]) loadImage(imageInput.files[0]);
+});
+
+songInput.addEventListener("change", () => {
+  if (songInput.files[0]) autofillCreditFromAudio(songInput.files[0]);
 });
 
 wallpaperSpacing.addEventListener("input", () => {
@@ -638,7 +1079,26 @@ tintStrength.addEventListener("input", () => {
   drawFrame();
 });
 
-[bumpText, durationInput, formatInput, toneInput, tintStrength, ...document.querySelectorAll("input[name='placement'], input[name='alignment']")]
+secondsPerLineInput.addEventListener("input", () => {
+  secondsPerLineValue.textContent = `${secondsPerLineInput.value}s`;
+});
+
+creditText.addEventListener("input", () => {
+  creditWasAutoFilled = false;
+  restartPreview();
+});
+
+creditSize.addEventListener("input", () => {
+  creditSizeValue.textContent = creditSize.value;
+  drawFrame();
+});
+
+addLineBtn.addEventListener("click", () => addTextLine());
+
+[...textLines.querySelectorAll(".text-line")].forEach(bindTextLine);
+updateLineLabels();
+
+[secondsPerLineInput, formatInput, toneInput, tintStrength, creditPosition, creditFont, creditSize, ...document.querySelectorAll("input[name='placement'], input[name='alignment']")]
   .forEach((input) => input.addEventListener("input", restartPreview));
 
 previewBtn.addEventListener("click", restartPreview);
