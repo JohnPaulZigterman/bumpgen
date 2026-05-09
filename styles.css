@@ -89,7 +89,8 @@ main {
 }
 
 .wallpaper-panel,
-.credits-panel {
+.credits-panel,
+.effects-panel {
   display: grid;
   gap: 10px;
   margin: 0 0 12px;
@@ -100,17 +101,20 @@ main {
 }
 
 .wallpaper-panel,
-.credits-panel {
+.credits-panel,
+.effects-panel {
   padding: 0;
 }
 
 .wallpaper-panel[open],
-.credits-panel[open] {
+.credits-panel[open],
+.effects-panel[open] {
   padding-bottom: 12px;
 }
 
 .wallpaper-panel .field,
-.credits-panel .field {
+.credits-panel .field,
+.effects-panel .field {
   margin-bottom: 0;
 }
 
@@ -131,17 +135,20 @@ main {
 }
 
 .wallpaper-panel .panel-title,
-.credits-panel .panel-title {
+.credits-panel .panel-title,
+.effects-panel .panel-title {
   list-style: none;
 }
 
 .wallpaper-panel .panel-title::-webkit-details-marker,
-.credits-panel .panel-title::-webkit-details-marker {
+.credits-panel .panel-title::-webkit-details-marker,
+.effects-panel .panel-title::-webkit-details-marker {
   display: none;
 }
 
 .wallpaper-panel .panel-title::after,
-.credits-panel .panel-title::after {
+.credits-panel .panel-title::after,
+.effects-panel .panel-title::after {
   content: "+";
   display: grid;
   width: 24px;
@@ -155,7 +162,8 @@ main {
 }
 
 .wallpaper-panel[open] .panel-title::after,
-.credits-panel[open] .panel-title::after {
+.credits-panel[open] .panel-title::after,
+.effects-panel[open] .panel-title::after {
   content: "-";
 }
 
@@ -168,12 +176,14 @@ main {
 }
 
 .wallpaper-panel[open] .summary-hint,
-.credits-panel[open] .summary-hint {
+.credits-panel[open] .summary-hint,
+.effects-panel[open] .summary-hint {
   font-size: 0;
 }
 
 .wallpaper-panel[open] .summary-hint::before,
-.credits-panel[open] .summary-hint::before {
+.credits-panel[open] .summary-hint::before,
+.effects-panel[open] .summary-hint::before {
   content: "Close";
   font-size: 0.72rem;
 }
@@ -182,6 +192,32 @@ main {
   display: grid;
   gap: 10px;
   padding: 0 12px;
+}
+
+.effect-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.effect-grid label {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101114;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.effect-grid input {
+  accent-color: var(--accent);
 }
 
 label,
@@ -211,6 +247,12 @@ textarea {
   resize: vertical;
   padding: 13px;
   line-height: 1.42;
+}
+
+.credit-textarea {
+  min-height: 74px;
+  padding: 10px;
+  resize: vertical;
 }
 
 textarea:focus,
@@ -460,6 +502,10 @@ video {
   }
 
   .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .effect-grid {
     grid-template-columns: 1fr;
   }
 

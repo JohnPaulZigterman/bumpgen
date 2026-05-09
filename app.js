@@ -5,6 +5,8 @@ const textLines = document.querySelector("#textLines");
 const addLineBtn = document.querySelector("#addLineBtn");
 const imageInput = document.querySelector("#imageInput");
 const songInput = document.querySelector("#songInput");
+const audioStart = document.querySelector("#audioStart");
+const audioStartValue = document.querySelector("#audioStartValue");
 const creditText = document.querySelector("#creditText");
 const creditPosition = document.querySelector("#creditPosition");
 const creditFont = document.querySelector("#creditFont");
@@ -18,6 +20,9 @@ const formatInput = document.querySelector("#format");
 const toneInput = document.querySelector("#tone");
 const tintStrength = document.querySelector("#tintStrength");
 const tintStrengthValue = document.querySelector("#tintStrengthValue");
+const effectToggles = [...document.querySelectorAll(".effect-toggle")];
+const effectIntensity = document.querySelector("#effectIntensity");
+const effectIntensityValue = document.querySelector("#effectIntensityValue");
 const previewBtn = document.querySelector("#previewBtn");
 const renderBtn = document.querySelector("#renderBtn");
 const downloadLink = document.querySelector("#downloadLink");
@@ -36,17 +41,23 @@ const randomizeWallpaperBtn = document.querySelector("#randomizeWallpaperBtn");
 const useWallpaperBtn = document.querySelector("#useWallpaperBtn");
 
 let backgroundImage = null;
+let backgroundVideo = null;
 let backgroundUrl = "";
 let outputUrl = "";
 let animationId = 0;
 let previewStart = performance.now();
 let wallpaperSeed = Math.floor(Math.random() * 100000);
 let creditWasAutoFilled = true;
+let audioProbeUrl = "";
+let previewAudio = null;
+const effectCanvas = document.createElement("canvas");
+const effectCtx = effectCanvas.getContext("2d");
 
 const state = {
   rendering: false,
   previewing: true,
   usingWallpaper: false,
+  previewAudioEnabled: false,
 };
 
 function clamp(value, min, max) {
@@ -80,6 +91,57 @@ function activeText(time) {
   const lines = textLineValues();
   const index = Math.min(lines.length - 1, Math.floor(time / secondsPerLine()));
   return lines[index] || " ";
+}
+
+function formatTimecode(seconds) {
+  if (!Number.isFinite(seconds)) return "0:00";
+  const total = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(total / 60);
+  const remaining = String(total % 60).padStart(2, "0");
+  return `${minutes}:${remaining}`;
+}
+
+function updateAudioStartReadout() {
+  const current = Number(audioStart.value) || 0;
+  const max = Number(audioStart.max) || 0;
+  audioStartValue.textContent = max > 0 ? `${formatTimecode(current)} / ${formatTimecode(max)}` : "0:00";
+}
+
+function stopPreviewAudio() {
+  state.previewAudioEnabled = false;
+  if (previewAudio) {
+    previewAudio.pause();
+  }
+}
+
+function resetAudioStart() {
+  stopPreviewAudio();
+  audioStart.value = "0";
+  audioStart.max = "0";
+  audioStart.disabled = true;
+  updateAudioStartReadout();
+}
+
+function configureAudioStart(file) {
+  stopPreviewAudio();
+  if (audioProbeUrl) URL.revokeObjectURL(audioProbeUrl);
+  resetAudioStart();
+  if (!file) return;
+
+  audioProbeUrl = URL.createObjectURL(file);
+  previewAudio = new Audio(audioProbeUrl);
+  previewAudio.loop = true;
+  previewAudio.volume = 0.82;
+  const probe = new Audio();
+  probe.preload = "metadata";
+  probe.src = audioProbeUrl;
+  probe.onloadedmetadata = () => {
+    const max = Math.max(0, probe.duration || 0);
+    audioStart.max = String(max.toFixed(1));
+    audioStart.disabled = max === 0;
+    updateAudioStartReadout();
+  };
+  probe.onerror = resetAudioStart;
 }
 
 function synchsafeToInt(bytes) {
@@ -155,24 +217,16 @@ async function autofillCreditFromAudio(file) {
   try {
     const metadata = await readAudioMetadata(file);
     const fallbackName = file.name.replace(/\.[^/.]+$/, "");
-    let text = "";
-
-    if (metadata.artist && metadata.title) {
-      text = `Music: ${metadata.title} by ${metadata.artist}`;
-    } else if (metadata.artist) {
-      text = `Music: ${metadata.artist}`;
-    } else if (metadata.title) {
-      text = `Music: ${metadata.title}`;
-    } else {
-      text = `Music: ${fallbackName}`;
-    }
+    const song = metadata.title || fallbackName;
+    const artist = metadata.artist || "Unknown artist";
+    const text = `Song: ${song}\nArtist: ${artist}`;
 
     creditText.value = text;
     creditWasAutoFilled = true;
     restartPreview();
   } catch (error) {
     console.warn("Could not read audio metadata", error);
-    creditText.value = `Music: ${file.name.replace(/\.[^/.]+$/, "")}`;
+    creditText.value = `Song: ${file.name.replace(/\.[^/.]+$/, "")}\nArtist: Unknown artist`;
     creditWasAutoFilled = true;
     restartPreview();
   }
@@ -180,6 +234,14 @@ async function autofillCreditFromAudio(file) {
 
 function tintAlpha() {
   return clamp(Number(tintStrength.value) || 0, 0, 100) / 100;
+}
+
+function selectedEffects() {
+  return effectToggles.filter((input) => input.checked).map((input) => input.value);
+}
+
+function effectAmount() {
+  return clamp(Number(effectIntensity.value) || 0, 0, 100) / 100;
 }
 
 function wallpaperConfig() {
@@ -205,9 +267,20 @@ function setCanvasFormat() {
   }
 }
 
-function loadImage(file) {
+function clearBackgroundMedia() {
   if (backgroundUrl) URL.revokeObjectURL(backgroundUrl);
-  state.usingWallpaper = false;
+  if (backgroundVideo) {
+    backgroundVideo.pause();
+    backgroundVideo.removeAttribute("src");
+    backgroundVideo.load();
+  }
+  backgroundImage = null;
+  backgroundVideo = null;
+  backgroundUrl = "";
+}
+
+function loadImageBackground(file) {
+  clearBackgroundMedia();
   backgroundImage = new Image();
   backgroundUrl = URL.createObjectURL(file);
   backgroundImage.src = backgroundUrl;
@@ -217,6 +290,36 @@ function loadImage(file) {
     status.textContent = "That image could not be loaded.";
     drawFrame();
   };
+}
+
+function loadVideoBackground(file) {
+  clearBackgroundMedia();
+  backgroundVideo = document.createElement("video");
+  backgroundUrl = URL.createObjectURL(file);
+  backgroundVideo.src = backgroundUrl;
+  backgroundVideo.muted = true;
+  backgroundVideo.loop = true;
+  backgroundVideo.playsInline = true;
+  backgroundVideo.preload = "auto";
+  backgroundVideo.onloadeddata = () => {
+    backgroundVideo.play().catch(() => {});
+    drawFrame();
+  };
+  backgroundVideo.onerror = () => {
+    backgroundVideo = null;
+    status.textContent = "That video could not be loaded.";
+    drawFrame();
+  };
+  backgroundVideo.load();
+}
+
+function loadBackground(file) {
+  state.usingWallpaper = false;
+  if (file.type.startsWith("video/")) {
+    loadVideoBackground(file);
+  } else {
+    loadImageBackground(file);
+  }
 }
 
 function seededUnit(seed, x, y, salt = 0) {
@@ -624,13 +727,16 @@ function renderWallpaperPreview() {
   drawWallpaperBackground(wallpaperPreviewCtx, wallpaperPreview.width, wallpaperPreview.height, 0.8, wallpaperConfig());
 }
 
-function drawCoverImage(image, x, y, width, height) {
-  const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
-  const drawWidth = image.naturalWidth * scale;
-  const drawHeight = image.naturalHeight * scale;
+function drawCoverMedia(media, x, y, width, height) {
+  const sourceWidth = media.videoWidth || media.naturalWidth;
+  const sourceHeight = media.videoHeight || media.naturalHeight;
+  if (!sourceWidth || !sourceHeight) return;
+  const scale = Math.max(width / sourceWidth, height / sourceHeight);
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
   const drawX = x + (width - drawWidth) / 2;
   const drawY = y + (height - drawHeight) / 2;
-  ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  ctx.drawImage(media, drawX, drawY, drawWidth, drawHeight);
 }
 
 function drawFallbackBackground(width, height, time) {
@@ -803,6 +909,162 @@ function drawCreditBlock(width, height) {
   ctx.restore();
 }
 
+function syncEffectCanvas(width, height) {
+  if (effectCanvas.width !== width || effectCanvas.height !== height) {
+    effectCanvas.width = width;
+    effectCanvas.height = height;
+  }
+}
+
+function copyCanvasToEffect(width, height) {
+  syncEffectCanvas(width, height);
+  effectCtx.clearRect(0, 0, width, height);
+  effectCtx.drawImage(canvas, 0, 0);
+}
+
+function applyWarpEffect(width, height, time, amount) {
+  copyCanvasToEffect(width, height);
+  ctx.clearRect(0, 0, width, height);
+  const sliceWidth = Math.max(8, Math.round(width / 90));
+  const maxOffset = amount * width * 0.018;
+  for (let x = 0; x < width; x += sliceWidth) {
+    const offset = Math.sin(time * 3.2 + x * 0.026) * maxOffset;
+    ctx.drawImage(effectCanvas, x, 0, sliceWidth, height, x + offset, 0, sliceWidth + 1, height);
+  }
+}
+
+function applyDvdSkipEffect(width, height, time, amount) {
+  copyCanvasToEffect(width, height);
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(effectCanvas, 0, 0);
+  const jump = Math.sin(time * 12.5) > 0.72 ? 1 : 0;
+  if (!jump) return;
+  const slices = 3 + Math.round(amount * 5);
+  for (let index = 0; index < slices; index += 1) {
+    const y = Math.floor(seededUnit(7, index, Math.floor(time * 8), 2) * height);
+    const h = Math.max(8, Math.floor(height * (0.018 + amount * 0.025)));
+    const offset = (seededUnit(11, index, Math.floor(time * 10), 3) - 0.5) * width * amount * 0.18;
+    ctx.drawImage(effectCanvas, 0, y, width, h, offset, y, width, h);
+  }
+}
+
+function applyFisheyeEffect(width, height, amount) {
+  copyCanvasToEffect(width, height);
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(effectCanvas, 0, 0);
+  const tile = Math.max(18, Math.round(Math.min(width, height) / 36));
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(width, height) * 0.52;
+  for (let y = Math.max(0, cy - radius); y < Math.min(height, cy + radius); y += tile) {
+    for (let x = Math.max(0, cx - radius); x < Math.min(width, cx + radius); x += tile) {
+      const dx = x + tile / 2 - cx;
+      const dy = y + tile / 2 - cy;
+      const distance = Math.hypot(dx, dy) / radius;
+      if (distance > 1) continue;
+      const scale = 1 + amount * 0.55 * (1 - distance) * (1 - distance);
+      const drawSize = tile * scale;
+      ctx.drawImage(effectCanvas, x, y, tile, tile, x + tile / 2 - drawSize / 2, y + tile / 2 - drawSize / 2, drawSize, drawSize);
+    }
+  }
+
+  const lens = ctx.createRadialGradient(cx, cy, radius * 0.15, cx, cy, radius);
+  lens.addColorStop(0, "rgba(255, 255, 255, 0.08)");
+  lens.addColorStop(0.68, "rgba(255, 255, 255, 0)");
+  lens.addColorStop(1, `rgba(0, 0, 0, ${0.2 * amount})`);
+  ctx.fillStyle = lens;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawNoiseOverlay(width, height, time, amount) {
+  const density = Math.floor(width * height * (0.00035 + amount * 0.0015));
+  ctx.save();
+  ctx.globalAlpha = 0.22 + amount * 0.38;
+  for (let index = 0; index < density; index += 1) {
+    const x = seededUnit(97, index, Math.floor(time * 30), 1) * width;
+    const y = seededUnit(113, index, Math.floor(time * 30), 2) * height;
+    const light = seededUnit(131, index, Math.floor(time * 30), 3) > 0.5 ? 255 : 0;
+    ctx.fillStyle = `rgb(${light}, ${light}, ${light})`;
+    ctx.fillRect(x, y, 1 + amount * 2, 1 + amount * 2);
+  }
+  ctx.restore();
+}
+
+function drawVhsOverlay(width, height, time, amount) {
+  ctx.save();
+  ctx.globalAlpha = 0.18 + amount * 0.22;
+  for (let y = 0; y < height; y += Math.max(3, Math.round(8 - amount * 4))) {
+    const roll = seededUnit(211, Math.floor(y), Math.floor(time * 18), 4);
+    if (roll < 0.55) continue;
+    ctx.fillStyle = roll > 0.86 ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.9)";
+    ctx.fillRect(0, y, width, 1 + amount * 2);
+  }
+  const tearY = (time * height * 0.45) % height;
+  ctx.fillStyle = `rgba(255,255,255,${0.12 + amount * 0.12})`;
+  ctx.fillRect(0, tearY, width, 2 + amount * 7);
+  ctx.restore();
+}
+
+function drawScanlines(width, height, amount) {
+  ctx.save();
+  ctx.globalAlpha = 0.14 + amount * 0.22;
+  ctx.fillStyle = "#000";
+  for (let y = 0; y < height; y += 4) {
+    ctx.fillRect(0, y, width, 1);
+  }
+  ctx.restore();
+}
+
+function drawChromaticBleed(width, height, time, amount) {
+  copyCanvasToEffect(width, height);
+  const offset = 2 + amount * 7 + Math.sin(time * 4) * amount * 2;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.18 + amount * 0.22;
+  ctx.drawImage(effectCanvas, offset, 0);
+  ctx.fillStyle = "rgba(255,0,80,0.25)";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(effectCanvas, -offset, 0);
+  ctx.fillStyle = "rgba(0,190,255,0.2)";
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
+function drawFlicker(width, height, time, amount) {
+  const flicker = (Math.sin(time * 18) + seededUnit(41, Math.floor(time * 24), 0, 1) - 0.5) * amount;
+  ctx.save();
+  ctx.fillStyle = flicker > 0 ? `rgba(255,255,255,${flicker * 0.12})` : `rgba(0,0,0,${Math.abs(flicker) * 0.18})`;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
+function drawLetterbox(width, height, amount) {
+  const bar = height * (0.055 + amount * 0.07);
+  ctx.save();
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, width, bar);
+  ctx.fillRect(0, height - bar, width, bar);
+  ctx.restore();
+}
+
+function applySelectedEffects(width, height, time) {
+  const effects = selectedEffects();
+  if (!effects.length) return;
+  const amount = effectAmount();
+
+  if (effects.includes("warp")) applyWarpEffect(width, height, time, amount);
+  if (effects.includes("dvd")) applyDvdSkipEffect(width, height, time, amount);
+  if (effects.includes("fisheye")) applyFisheyeEffect(width, height, amount);
+  if (effects.includes("chromatic")) drawChromaticBleed(width, height, time, amount);
+  if (effects.includes("flicker")) drawFlicker(width, height, time, amount);
+  if (effects.includes("vhs")) drawVhsOverlay(width, height, time, amount);
+  if (effects.includes("scanlines")) drawScanlines(width, height, amount);
+  if (effects.includes("noise")) drawNoiseOverlay(width, height, time, amount);
+  if (effects.includes("letterbox")) drawLetterbox(width, height, amount);
+}
+
 function drawFrame(time = 0) {
   setCanvasFormat();
   const width = canvas.width;
@@ -813,7 +1075,9 @@ function drawFrame(time = 0) {
   if (state.usingWallpaper) {
     drawWallpaperBackground(ctx, width, height, time, wallpaperConfig());
   } else if (backgroundImage && backgroundImage.complete && backgroundImage.naturalWidth) {
-    drawCoverImage(backgroundImage, 0, 0, width, height);
+    drawCoverMedia(backgroundImage, 0, 0, width, height);
+  } else if (backgroundVideo && backgroundVideo.readyState >= 2) {
+    drawCoverMedia(backgroundVideo, 0, 0, width, height);
   } else {
     drawFallbackBackground(width, height, time);
   }
@@ -833,6 +1097,7 @@ function drawFrame(time = 0) {
 
   drawTextBlock(width, height, time);
   drawCreditBlock(width, height);
+  applySelectedEffects(width, height, time);
 }
 
 function previewLoop(now) {
@@ -840,19 +1105,48 @@ function previewLoop(now) {
   const duration = durationSeconds();
   const elapsed = ((now - previewStart) / 1000) % duration;
   drawFrame(elapsed);
+  syncPreviewAudio(elapsed);
   timeLabel.textContent = `${elapsed.toFixed(1)}s`;
   durationLabel.textContent = `${duration.toFixed(1)}s`;
   progress.style.width = `${(elapsed / duration) * 100}%`;
   animationId = requestAnimationFrame(previewLoop);
 }
 
+function syncPreviewAudio(elapsed, force = false) {
+  if (!state.previewAudioEnabled || !previewAudio || !Number.isFinite(previewAudio.duration) || previewAudio.duration === 0) return;
+
+  const start = Number(audioStart.value) || 0;
+  let target = start + elapsed;
+  while (target >= previewAudio.duration) target -= previewAudio.duration;
+
+  if (force || Math.abs(previewAudio.currentTime - target) > 0.35) {
+    previewAudio.currentTime = target;
+  }
+}
+
 function restartPreview() {
+  stopPreviewAudio();
   stage.classList.remove("hide");
   outputVideo.classList.add("hide");
   state.previewing = true;
   previewStart = performance.now();
   cancelAnimationFrame(animationId);
   animationId = requestAnimationFrame(previewLoop);
+}
+
+async function startPreviewWithAudio() {
+  restartPreview();
+  if (!previewAudio || audioStart.disabled) return;
+
+  state.previewAudioEnabled = true;
+  syncPreviewAudio(0, true);
+  try {
+    await previewAudio.play();
+    status.textContent = "Previewing with audio.";
+  } catch (error) {
+    state.previewAudioEnabled = false;
+    status.textContent = "Preview started without audio.";
+  }
 }
 
 function keepOutputPreviewLive() {
@@ -862,6 +1156,24 @@ function keepOutputPreviewLive() {
   previewStart = performance.now();
   cancelAnimationFrame(animationId);
   animationId = requestAnimationFrame(previewLoop);
+}
+
+function seekVideo(video, time) {
+  return new Promise((resolve) => {
+    if (!video || !Number.isFinite(video.duration) || video.duration === 0) {
+      resolve();
+      return;
+    }
+
+    const target = Math.min(time, Math.max(0, video.duration - 0.05));
+    const finish = () => {
+      video.removeEventListener("seeked", finish);
+      resolve();
+    };
+    video.addEventListener("seeked", finish, { once: true });
+    video.currentTime = target;
+    setTimeout(finish, 700);
+  });
 }
 
 function bestMimeType() {
@@ -879,6 +1191,7 @@ async function renderVideo() {
     return;
   }
 
+  stopPreviewAudio();
   state.rendering = true;
   state.previewing = false;
   renderBtn.disabled = true;
@@ -906,6 +1219,7 @@ async function renderVideo() {
       audioElement.loop = true;
       audioElement.volume = 0.82;
       audioUrl = audioElement.src;
+      audioElement.currentTime = Math.min(Number(audioStart.value) || 0, Number(audioStart.max) || 0);
       const source = audioContext.createMediaElementSource(audioElement);
       const gain = audioContext.createGain();
       gain.gain.value = 0.9;
@@ -924,6 +1238,11 @@ async function renderVideo() {
     const done = new Promise((resolve) => {
       recorder.onstop = resolve;
     });
+
+    if (backgroundVideo) {
+      await seekVideo(backgroundVideo, 0);
+      await backgroundVideo.play().catch(() => {});
+    }
 
     drawFrame(0);
     timeLabel.textContent = "0.0s";
@@ -1037,11 +1356,19 @@ function addTextLine(value = "") {
 }
 
 imageInput.addEventListener("change", () => {
-  if (imageInput.files[0]) loadImage(imageInput.files[0]);
+  if (imageInput.files[0]) loadBackground(imageInput.files[0]);
 });
 
 songInput.addEventListener("change", () => {
-  if (songInput.files[0]) autofillCreditFromAudio(songInput.files[0]);
+  if (songInput.files[0]) {
+    configureAudioStart(songInput.files[0]);
+    autofillCreditFromAudio(songInput.files[0]);
+  } else {
+    resetAudioStart();
+    if (audioProbeUrl) URL.revokeObjectURL(audioProbeUrl);
+    audioProbeUrl = "";
+    previewAudio = null;
+  }
 });
 
 wallpaperSpacing.addEventListener("input", () => {
@@ -1079,6 +1406,16 @@ tintStrength.addEventListener("input", () => {
   drawFrame();
 });
 
+effectIntensity.addEventListener("input", () => {
+  effectIntensityValue.textContent = `${effectIntensity.value}%`;
+  drawFrame();
+});
+
+audioStart.addEventListener("input", () => {
+  updateAudioStartReadout();
+  syncPreviewAudio(0, true);
+});
+
 secondsPerLineInput.addEventListener("input", () => {
   secondsPerLineValue.textContent = `${secondsPerLineInput.value}s`;
 });
@@ -1098,10 +1435,10 @@ addLineBtn.addEventListener("click", () => addTextLine());
 [...textLines.querySelectorAll(".text-line")].forEach(bindTextLine);
 updateLineLabels();
 
-[secondsPerLineInput, formatInput, toneInput, tintStrength, creditPosition, creditFont, creditSize, ...document.querySelectorAll("input[name='placement'], input[name='alignment']")]
+[secondsPerLineInput, formatInput, toneInput, tintStrength, effectIntensity, ...effectToggles, creditPosition, creditFont, creditSize, ...document.querySelectorAll("input[name='placement'], input[name='alignment']")]
   .forEach((input) => input.addEventListener("input", restartPreview));
 
-previewBtn.addEventListener("click", restartPreview);
+previewBtn.addEventListener("click", startPreviewWithAudio);
 renderBtn.addEventListener("click", renderVideo);
 
 durationLabel.textContent = `${durationSeconds().toFixed(1)}s`;

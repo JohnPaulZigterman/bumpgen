@@ -73,6 +73,14 @@
           <input id="songInput" type="file" accept="audio/*">
         </div>
 
+        <div class="field">
+          <label for="audioStart">Audio start</label>
+          <div class="range-row">
+            <input id="audioStart" type="range" min="0" max="0" step="0.1" value="0" disabled>
+            <span id="audioStartValue">0:00</span>
+          </div>
+        </div>
+
         <details class="credits-panel" aria-label="Music credit settings">
           <summary class="panel-title">
             <span>Music credit</span>
@@ -81,7 +89,7 @@
           <div class="panel-body">
             <div class="field">
               <label for="creditText">Credit text</label>
-              <input id="creditText" type="text" value="" placeholder="Audio metadata will appear here">
+              <textarea id="creditText" class="credit-textarea" placeholder="Audio metadata will appear here"></textarea>
             </div>
             <div class="grid-2">
               <div class="field">
@@ -120,8 +128,8 @@
         </details>
 
         <div class="field">
-          <label for="imageInput">Background image</label>
-          <input id="imageInput" type="file" accept="image/*">
+          <label for="imageInput">Background</label>
+          <input id="imageInput" type="file" accept="image/*,video/*">
         </div>
 
         <details class="wallpaper-panel" aria-label="Wallpaper generator">
@@ -211,6 +219,33 @@
             <span id="tintStrengthValue">72%</span>
           </div>
         </div>
+
+        <details class="effects-panel" aria-label="Overlay and effect settings">
+          <summary class="panel-title">
+            <span>Overlays & effects</span>
+            <span class="summary-hint">Open</span>
+          </summary>
+          <div class="panel-body">
+            <div class="effect-grid">
+              <label><input class="effect-toggle" type="checkbox" value="noise"> TV noise</label>
+              <label><input class="effect-toggle" type="checkbox" value="vhs"> VHS static</label>
+              <label><input class="effect-toggle" type="checkbox" value="dvd"> DVD skip</label>
+              <label><input class="effect-toggle" type="checkbox" value="warp"> Warping</label>
+              <label><input class="effect-toggle" type="checkbox" value="fisheye"> Fish eye</label>
+              <label><input class="effect-toggle" type="checkbox" value="scanlines"> Scanlines</label>
+              <label><input class="effect-toggle" type="checkbox" value="chromatic"> Color bleed</label>
+              <label><input class="effect-toggle" type="checkbox" value="flicker"> Flicker</label>
+              <label><input class="effect-toggle" type="checkbox" value="letterbox"> Letterbox</label>
+            </div>
+            <div class="field">
+              <label for="effectIntensity">Effect intensity</label>
+              <div class="range-row">
+                <input id="effectIntensity" type="range" min="0" max="100" value="45">
+                <span id="effectIntensityValue">45%</span>
+              </div>
+            </div>
+          </div>
+        </details>
 
         <div class="actions">
           <button id="previewBtn" type="button" class="secondary">Preview</button>
